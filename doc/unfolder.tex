@@ -1,0 +1,381 @@
+\documentclass[11pt,a4paper,twoside,openright]{book}
+
+\newcommand{\unfolder}{{\textsf{unfolder~}}}
+
+\title{\unfolder: User Manual}
+\author{Jos{\'e} M. Rey Poza}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\chapter{What is \unfolder$\!\!$?}
+\label{chap_what}
+
+
+\unfolder is an experimental toolkit that enables the user to unfold
+full fledged functional programs (i.e. programs that use higher order,
+function composition and lazy evaluation with partially undefined
+terms).
+
+\unfolder is written in Prolog (more specifically, Ciao Prolog). In
+its current state the programs to be unfolded are read from the Prolog
+code itself, where they are represented as Prolog facts. These facts
+represent guarded rules belonging to a functional program written in a
+generic functional language. That is, \unfolder does not
+currently read functional programs (written in Haskell or any other
+existing functional language); instead, it reads the source to be
+unfolded from an internal representation.
+
+\section{Unfolding}
+
+Unfolding is the process of replacing a function invocation by the
+definition of that very same function. By repeating the process as
+many times as necessary, what we get is a program that has the same
+meaning as the original {\em folded} but that is simpler than the original
+one in terms of function composition (a completely unfolded program
+has no function composition at all but this is not possible in
+general). That simpler form of the program can be seen as a set of
+facts that plainly express the meaning of the original program (its
+semantics).   
+
+Unfolding generates valid functional code that can be run just as the
+original one to produce the same result (provided full unfolding has
+been possible).
+
+Unfolding is an iterative process: Starting with an empty code, every
+iteration produces a better approximation to the meaning of the
+original code. These successive approximations draw closer to the real
+meaning of the program by having more rules that deal with more input
+values or by letting existing rules handle better approximations of
+large terms.
+
+Every approximation to the final meaning of the functional program
+under examination is nothing more than a set of functional rules. The
+set of functional rules contained within a given approximation is
+called {\bf an interpretation}. The unfolding process begins with an
+empty interpretation (denoted as $I_0$) and every iteration of
+unfolding takes current interpreation along with the original program
+rules to generate the next interpretation (that is, jumping from $I_n$
+to $I_{n+1}$). 
+
+\chapter{Writing Programs for \unfolder}
+\label{chap_writing_programs}
+
+As stated in chapter \ref{chap_what}, \unfolder reads the programs it
+must unfold from Prolog source code. Programs to be unfolded are made
+up of a number of rules. All rules must adhere to the following
+format:
+
+\begin{center}
+{\tt rule(Function\_Name,Patterns,Guard,Body,Where)}
+\end{center}
+
+\noindent
+where each argument of {\tt rule} describes a part of a given
+rule. For example, the two rules for the well known {\tt append}
+function are written as follows:
+
+\begin{verbatim}
+rule(append,[nil,X],_,X,[]).
+rule(append,[cons(X,Xs),Ys],_,cons(X,append(Xs,Ys)),[]).
+\end{verbatim} 
+
+\noindent
+These two Prolog facts denote the following two Haskell rules:
+
+\begin{verbatim}
+append [] x = x
+append (x:xs) ys = (x:(append xs ys))
+\end{verbatim}
+
+\noindent
+The example above shows how program rules must be written:
+
+\begin{itemize}
+\item
+Free functional variables are represented by free logic variables.
+
+\item
+Constructors are written as Prolog atoms (that is, they start by a
+lowecase letter). Lists are represented by constractors {\tt nil} (for
+{\tt []}) and {\tt cons} (for {\tt (\_:\_)}).
+
+\item
+No type declaration is necessary. The unfolder does not currently know
+anything about types, so is up to the user to ensure that all programs
+are well typed.
+\end{itemize}
+
+\noindent
+In turn, each part of the rule must obey the following restrictions:
+
+\begin{itemize}
+\item
+The head must be an atom representing the name of the function. All
+rules defining the same function must bear the same atom at this
+position.
+
+\item
+The second argument for {\tt rule} represents the pattern of every
+rule. A pattern is written as a list of terms. All functions defined
+are considered to be {\em fully currified}. If tuples have to be used,
+the can be written as \verb.(.$\mathit{term}_1,\ldots,\mathit{term}_n$
+\verb.)..
+
+\item
+The guard of the rule is next. An empty guard is represented by a free
+Prolog variable. If the guard is not empty, it must be written using
+normal applicative notations (that is, $f(1,2)$ must be written as
+{\tt f(1,2)}). Boolean conjunction is written as {\tt and(\_,\_)}.
+
+\item
+The fourth argument of {\tt rule} contains the body of the rule. It
+has to be written according the same rules that govern the writing of
+guards.
+
+\item
+Finally, the last argument is an experimental one intended to contain
+local ({\em where}) declarations. It is currently unused and must
+contain an empty list (\verb.[].).
+\end{itemize}
+
+\chapter{Running \unfolder}
+\label{chap_running}
+
+\section{Execution}
+
+\unfolder is currently included in one Prolog file that must be run
+from within Ciao Prolog. Therefore, Ciao must be started and then {\tt
+  unfolding.pl} must be loaded:
+
+\begin{verbatim}
+$ ciao
+Ciao 1.15.0-14760: mié jun 27 18:36:00 CEST 2012 [install]
+?- [unfolding].
+
+yes
+?-
+\end{verbatim}
+
+The rules that represent the functional program to be unfolded must,
+at the time of writing this, be present inside the Prolog code.
+
+As said before, unfolding is an iterative process. Basically, the
+process of unfolding a functional program involves running an
+iteration and examining its result until needed.
+
+In \unfolder, an iteration is run by invoking the Prolog predicate \\
+{\tt unfolding\_operator/0}. This takes the functional program
+rules (represented as Prolog facts) and current interpretation to
+generate the next interpretation.
+
+Once {\tt unfolding\_operator/0} has been run, the content of current
+interpretation can be examined by means of {\tt show\_int/0}.
+
+The unfolding of the {\tt append} function is shown below:
+
+\begin{verbatim}
+$ ciao
+Ciao 1.15.0-14760: mié jun 27 18:36:00 CEST 2012 [install]
+?- [unfolding].
+
+yes
+?- unfolding_operator,show_int.
+* append(Nil,b) = b
+* append(Cons(b,c),d) = Cons(b,Bot)
+
+yes
+?- unfolding_operator,show_int.
+* append(Nil,b) = b
+* append(Cons(b,Nil),c) = Cons(b,c)
+* append(Cons(b,Cons(c,d)),e) = Cons(b,Cons(c,Bot))
+
+yes
+?- unfolding_operator,show_int.
+* append(Nil,b) = b
+* append(Cons(b,Nil),c) = Cons(b,c)
+* append(Cons(b,Cons(c,Nil)),d) = Cons(b,Cons(c,d))
+* append(Cons(b,Cons(c,Cons(d,e))),f) = Cons(b,Cons(c,Cons(d,Bot)))
+
+yes
+?-
+\end{verbatim}  
+
+\noindent
+Three unfolding iterations are shown above ($I_1, I_2$ and $I_3$). Note
+that every step involves invoking {\tt unfolding\_operator/0} to
+create a new interpretation and invoking {\tt show\_int/0} just after
+that to see what the new interpretation contains. Of course, there is
+no problem in invoking {\tt unfolding\_operator/0} any number of times
+between two invocations of {\tt show\_int/0}.
+
+\section{Understanding the Output of \unfolder}
+
+The output of \unfolder is the one generated by {\tt
+  show\_int/0}. This predicate dumps current interpretation to the
+screen. Every functional rule that belongs to current interpretation
+is written in a somewhat beautified form. Although the result of
+unfolding is valid functional code, \unfolder does not generate valid
+Haskell code yet (in particular the rules are still uncurrified). This
+is work for the future.
+
+The {\em beautification} of every interpretation element (every
+generated functional rule) comprises the following steps:
+
+\begin{itemize}
+\item
+Every interpretation element is preceded by an asterisk (\verb.'*'.)
+to ease the reading of rules.
+
+\item
+Constructors are shown with uppercase initials. Lists are shown as
+{\tt Nil} (for {\tt []}) and {\tt Cons} (for {\tt (\_:\_)}). Note that
+{\tt Bot} ({\em bottom}) is an special constructor denoting the absence of
+information (usally written as $\bot$ in books).
+
+\item
+Variables are shown with lowercase initials.
+
+\item
+Partial or higher order applications are represented by \\ 
+{\em $<$function$>$}{\tt @}{\em $<$arguments\_list$>$} where {\em
+  $<$function$>$} can be a free variable or the name of a function and
+{\em $<$arguments\_list$>$} is a list of arguments already applied to the
+function. 
+\end{itemize}  
+
+\noindent
+The three iterations run above show how the unfolding process moves
+closer and closer to the final meaning of the program until the final
+full meaning is eventually found (which does not happen in this case
+since {\tt append} has an infinite semantics). Every iteration
+includes the previous one and adds more elements to it. Those new
+elements are able to deal with successively longer lists.
+
+The next example shows that unfolding does not always add more rules
+to an interpretation even if the final result has not been
+found. Consider the following code:
+
+\begin{verbatim}
+data Nat = Zero | Suc Nat
+
+ones :: [Int]
+ones = (1:ones)
+
+take_n :: Nat -> [Int] -> Int
+take_n Zero _ = []
+take_n Suc(n) (x:xs) = (x:(take_n n xs))
+
+main5 :: [Int]
+main5 = take_n Suc(Suc(Zero)) ones
+\end{verbatim}
+
+\noindent
+Its first unfolding iterations are as follows:
+
+\begin{verbatim}
+$ ciao
+Ciao 1.15.0-14760: mié jun 27 18:36:00 CEST 2012 [install]
+?- [unfolding].
+
+yes
+?- unfolding_operator,show_int.
+* ones = Cons(1,Bot)
+* take_n(Zero,b) = Nil
+* take_n(Suc(b),Cons(c,d)) = Cons(c,Bot)
+
+yes
+?- unfolding_operator,show_int.
+* take_n(Zero,b) = Nil
+* ones = Cons(1,Cons(1,Bot))
+* take_n(Suc(Zero),Cons(b,c)) = Cons(b,Nil)
+* take_n(Suc(Suc(b)),Cons(c,Cons(d,e))) = Cons(c,Cons(d,Bot))
+* main5 = Cons(1,Bot)
+
+yes
+?- unfolding_operator,show_int.
+* take_n(Zero,b) = Nil
+* take_n(Suc(Zero),Cons(b,c)) = Cons(b,Nil)
+* ones = Cons(1,Cons(1,Cons(1,Bot)))
+* take_n(Suc(Suc(Zero)),Cons(b,Cons(c,d))) = Cons(b,Cons(c,Nil))
+* take_n(Suc(Suc(Suc(b))),Cons(c,Cons(d,Cons(e,f)))) = 
+    Cons(c,Cons(d,Cons(e,Bot)))
+* main5 = Cons(1,Cons(1,Bot))
+
+yes
+?- unfolding_operator,show_int.
+* take_n(Zero,b) = Nil
+* take_n(Suc(Zero),Cons(b,c)) = Cons(b,Nil)
+* take_n(Suc(Suc(Zero)),Cons(b,Cons(c,d))) = Cons(b,Cons(c,Nil))
+* ones = Cons(1,Cons(1,Cons(1,Cons(1,Bot))))
+* take_n(Suc(Suc(Suc(Zero))),Cons(b,Cons(c,Cons(d,e)))) = 
+    Cons(b,Cons(c,Cons(d,Nil)))
+* take_n(Suc(Suc(Suc(Suc(b)))),Cons(c,Cons(d,Cons(e,Cons(f,g))))) = 
+    Cons(c,Cons(d,Cons(e,Cons(f,Bot))))
+* main5 = Cons(1,Cons(1,Nil))
+\end{verbatim}
+
+\noindent
+Take a look at function {\tt ones}: It has just one rule in every
+iteration. By contrast, {\tt take\_n} gathers more rules as iterations
+go by. This is due to the fact that {\tt ones} has just one pattern
+(the empty one) so all the rules are covered by a single case. Observe
+how the value returned by that rule grows bigger with every iteration
+(keep in mind that {\tt Bot} is the infimum -- least value -- of the
+domain inside which interpretations are generated).
+
+\section{Other Examples}
+
+The code of \unfolder contains many additional examples covering the
+main features of functional programming. They all are written as
+Prolog rules belonging to the {\tt rule/5} predicate. All rules must
+be commented out except for those that are about to be tested. The
+steps for a test are the following ones:
+
+\begin{enumerate}
+\item
+Uncomment the rules to be tested. Comment all the others.
+
+\item
+Load {\tt unfolding.pl} into Ciao Prolog.
+
+\item
+Run the iterations as described above.
+\end{enumerate}
+
+\noindent
+The examples included in {\tt unfolding.pl} usually contain a {\tt
+  mainN} function where {\tt N} is a number. This function can be seen
+as the one that generates the answer that is being sought with the
+particular test case.
+
+Topics covered by the examples include:
+
+\begin{itemize}
+\item
+Functions that need the {\tt match} operator (see the relavent paper).
+
+\item
+Guarded rules.
+
+\item
+Experimenting with constraints within guards.
+
+\item
+Dealing with infinite structures and lazy evaluation.
+
+\item
+Higher order and partial applications.
+
+\item
+Treatment of predefined functions (i.e. those with no rules).
+
+\item
+Function composition.
+
+\end{itemize}
+
+\end{document}
