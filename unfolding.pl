@@ -156,10 +156,10 @@
 % rule(coin,[],_,1,[]).
 % rule(twocoins,[],_,coin+coin,[]).
 
-% rule(from_n,[N],_,cons(N,from_n(N+1)),[]).
-% rule(first,[cons(X,_Xs)],_,X,[]).
-% rule(app_first,[F,N],_,first(F@[N]),[]).
-% rule(main14,[N],_,app_first(from_n@[],N),[]).
+rule(from_n,[N],_,cons(N,from_n(N+1)),[]).
+rule(first,[cons(X,_Xs)],_,X,[]).
+rule(app_first,[F,N],_,first(F@[N]),[]).
+rule(main14,[N],_,app_first(from_n@[],N),[]).
 
 % rule(append,[nil,X],_,X,[]).
 % rule(append,[cons(X,Xs),Y],_,cons(X,append(Xs,Y)),[]).
@@ -175,9 +175,9 @@
 
 % rule(main18,[X],_,X+(1+1),[]).
 
-rule(m,[cons(1,cons(1,cons(1,_)))],_,1,[]).
-rule(ones,[],_,cons(1,ones),[]).
-rule(main19,[],_,m(ones),[]).
+% rule(m,[cons(1,cons(1,cons(1,_)))],_,1,[]).
+% rule(ones,[],_,cons(1,ones),[]).
+% rule(main19,[],_,m(ones),[]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Syntactic SETS
@@ -348,7 +348,7 @@ pretty_fact(fact(Function,Pattern,Guard,Body,Where)):-
 pretty_where([]).
 pretty_where([W|Ws]):-
   W='P'(Pattern,Exp), %% constructors_uppercase will have changed this: p -> P
-  write('match('),write(Pattern),write(','),write(Exp),write(')'),
+  write('snd(match('),write(Pattern),write(','),write(Exp),write('))'),
   (Ws=[]->true;write(',')),
   pretty_where(Ws).
 
