@@ -1,10 +1,13 @@
-:- module('unfolding',[rule/6,fact/6,hiddenfact/6,unfolding_operator/0, show_int/0,clean/0,unfold_rule/2,match/3,constructors_uppercase/2,constructors_uppercase_list/2,vars2letters/1,pretty_fact/2,reclean/1,lesser/2,remove_overlappings/1,eval_pf/3,eval/3]).
+:- module('unfolding',[rule/6,fact/6,hiddenfact/6,unfolding_operator/0, show_int/0,clean/0,unfold_rule/2,match/3,constructors_uppercase/2,constructors_uppercase_list/2,vars2letters/1,pretty_fact/2,reclean/1,lesser/2,remove_overlappings/1,facts_cat_eval/0, is_purgable/2, assert_outermost_only/0, retract_outermost_only/0]).
 :- use_module(library(terms_check)). %% variant/2
 :- use_module(library(write)). %% numbervars/3
 :- use_module(library(terms_vars)). %% varset/2
 
 
-:- dynamic fact/6, hiddenfact/6.
+:- dynamic fact/6, hiddenfact/6, outermost_only/0.
+%% outermost_only: Indicates that only outermost positions should be considered
+%% for unfolding.
+
 :- op(700,yfx,[@]). %% Partial and higher order applications
 :- op(675,yfx,[:]). %% Adition of a new argument to a partial application
 
@@ -148,11 +151,11 @@
 % rule(main13,[],_,first(suc(suc(suc(zero))),cons(1,cons(3,bot))),[],[]).
 % rule(main13,[],_,first(suc(suc(suc(zero))),cons(2,bot)),[],[]).
 
-% rule(insert,[empty,N],_,node(empty,N,empty),[],[]).
-% rule(insert,[node(Left,X,Right),N],_,ite(N<X,node(insert(Left,N),X,Right),node(Left,X,insert(Right,N))),[],[]).
-% rule(ite,[true,T,_E],_,T,[],[]).
-% rule(ite,[false,_T,E],_,E,[],[]).
-% rule(main18,[P,X],_,ite(P@[X],1,2),[],[]).
+% rule(insert,[empty,N],_,node(empty,N,empty),[],[rule('I1')]).
+% rule(insert,[node(Left,X,Right),N],_,ite(N<X,node(insert(Left,N),X,Right),node(Left,X,insert(Right,N))),[],[rule('I2')]).
+% rule(ite,[true,T,_E],_,T,[],[rule('IF1')]).
+% rule(ite,[false,_T,E],_,E,[],[rule('IF2')]).
+% rule(main18,[P,X],_,ite(P@[X],1,2),[],[rule('M')]).
 
 % rule(coin,[],_,0,[],[]).
 % rule(coin,[],_,1,[],[]).
@@ -192,11 +195,11 @@
 % rule(h,[0,_X,3],_,4,[],[]).
 % rule(main21,[],_,h(0,loop,3),[],[]).
 
-% rule(leq,[zero,_],_,true,[],[]).
-% rule(leq,[suc(_),zero],_,false,[],[]).
-% rule(leq,[suc(X),suc(Y)],_,leq(X,Y),[],[]).
-% rule(g,[zero],_,zero,[],[]).
-% rule(main22b,[X],_,leq(zero,g(X)),[],[]).
+rule(leq,[zero,_],_,true,[],[rule('L1')]).
+rule(leq,[suc(_),zero],_,false,[],[rule('L2')]).
+rule(leq,[suc(X),suc(Y)],_,leq(X,Y),[],[rule('L3')]).
+rule(g,[zero],_,zero,[],[rule('G1')]).
+rule(main22b,[X],_,leq(zero,g(X)),[],[rule('Main22b')]).
 % rule(loop,[],_,loop,[],[]).
 % rule(main22,[],_,leq(suc(zero),suc(loop)),[],[]).
 
@@ -207,8 +210,10 @@
 % rule(test,[F,N],_,ite(F@[N],1,0),[],[]).
 % rule(main23,[],_,test(invoca_loop,0),[],[]).
 
-% rule(addbad,[zero,_N],_,zero,[],[rule('AB1')]).
-% rule(addbad,[suc(M),N],_,suc(addbad(M,N)),[],[rule('AB2')]).
+% rule(addbad,[zero,_N],_,zero,[],[rule('A1')]).
+% rule(addbad,[suc(zero),N],_,suc(N),[],[rule('A2')]).
+% rule(addbad,[suc(suc(M)),N],_,suc(addbad(M,N)),[],[rule('A3')]).
+% rule(main24,[],_,addbad(suc(suc(suc(zero))),suc(zero)),[],[rule('M24')]).
 
 %% Case proposed by reviewer 2 of FLOPS14. h does indeed have 2 facts and they
 %% both are created in the same interpretation: unfold returns a set of facts,
@@ -220,6 +225,9 @@
 %% Another example by the second reviewer in FLOPS14. Observe how the scope 
 %% for g decreases from I1 to I2 because f is only partially defined. If all
 %% the functions are totally defined, there is no problem.
+%% This example also shows that the new clean continues to be necessary even 
+%% in the presence of purging (outermost unfolding).
+ 
 % rule(f,[zero],_,zero,[],[]).
 % rule(f,[X],neq(X,zero),bot,[],[]).
 % rule(g,[X],_,suc(f(X)),[],[]).
@@ -228,7 +236,7 @@
 % rule(main30,[],_,h(g(suc(zero))),[],[]).
 
 % rule(f,[zero],_,zero,[],[]).
-% % rule(f,[suc(_)],_,zero,[],[]).
+% rule(f,[suc(_)],_,zero,[],[]).
 % rule(g,[X],_,suc(f(X)),[],[]).
 % rule(h,[suc(_X)],_,suc(zero),[],[]).
 % rule(main30b,[],_,h(g(suc(zero))),[],[]).
@@ -257,17 +265,26 @@
 % rule(test,[X,Y],_,h(f(X,g(Y))),[],[rule('T1')]).
 % rule(f,[zero,zero],_,zero,[],[rule('F1')]).
 % rule(f,[suc(N),X],_,suc(f(N,X)),[],[rule('F2')]).
-% rule(f,[zero,suc(_)],_,zero,[],[rule('F3')]).
+% % rule(f,[zero,suc(_)],_,zero,[],[rule('F3')]).
 % rule(g,[zero],_,g(zero),[],[rule('G1')]).
 % rule(g,[suc(_)],_,zero,[],[rule('G2')]).
 % rule(h,[suc(_X)],_,zero,[],[rule('H1')]).
 % rule(main31,[],_,test(suc(zero),zero),[],[]).
 
+%% Example taken from one reviewer for PPDP14
+% rule(f,[X],_,c(g(X)),[],[rule('F1')]).
+% rule(g,[z],_,z,[],[rule('G1')]).
+% rule(h,[_X],_,z,[],[rule('H1')]).
+% rule(main,[X],_,h(f(X)),[],[rule('Main')]).
+
+%% Example: main32b does not unfold properly with outermost unfolding
 % rule(berry,[_X,false,true],_,1,[],[]).
 % rule(berry,[true,_Y,false],_,2,[],[]).
 % rule(berry,[false,true,_Z],_,3,[],[]).
+% rule(falso,[],_,false,[],[]).
 % rule(loop2,[X],_,loop2(X),[],[]).
-% rule(main32,[X,Z],_,berry(X,loop2(false),Z),[],[]).
+% rule(main32a,[X,Z],_,berry(X,loop2(false),Z),[],[]).
+% rule(main32b,[X,Z],_,berry(X,falso,Z),[],[]).
 
 % rule(zip,[nil,nil],_,nil,[],[]).
 % rule(zip,[cons(X,Xs),cons(Y,Ys)],_,cons(tup(X,Y),zip(Xs,Ys)),[],[]).
@@ -276,13 +293,71 @@
 % rule(ziptup,[tup(nil,nil)],_,nil,[],[]).
 % rule(ziptup,[tup(cons(X,Xs),cons(Y,Ys))],_,cons(tup(X,Y),ziptup(tup(Xs,Ys))),[],[]).
 
-rule(ite,[true,T,_E],_,T,[],[rule('I1')]).
-rule(ite,[false,_T,E],_,E,[],[rule('I2')]).
-rule(gen,[N],_,cons(N,gen(N+1)),[],[rule('G1')]).
-rule(senior,[Age],_,ite(Age>64,true,false),[],[rule('S1')]).
-rule(map,[_F,nil],_,nil,[],[rule('M1')]).
-rule(map,[F,cons(X,Xs)],_,cons(F@[X],map(F,Xs)),[],[rule('M2')]).
-rule(main50,[],_,map(senior@[],gen(64)),[],[rule('MAIN')]).
+
+%% Abstraction 1:
+% rule(addX,[evenX,M],_,M,[],[]).
+% rule(addX,[suc_cX(N),M],_,suc_fX(addX(N,M)),[],[]).
+% rule(suc_fX,[evenX],_,oddX,[],[]).
+% rule(suc_fX,[oddX],_,evenX,[],[]).
+
+%% Abstraction 1 b:
+% rule(addrX,[evenX,M],_,M,[],[]).
+% rule(addrX,[suc_cX(N),M],_,addrX(N,sucX(M)),[],[]).
+% rule(suc_fX,[evenX],_,oddX,[],[]).
+% rule(suc_fX,[oddX],_,evenX,[],[]).
+
+%% Abstraction 2:
+% rule(leqX,[zX,freeNatX],_,dontCareBoolX,[],[]).
+% rule(leqX,[sX(freeNatX),zX],_,dontCareBoolX,[],[]).
+% rule(leqX,[sX(X),sX(Y)],_,leqX(X,Y),[],[]).
+% rule(z_fX,[],_,zX,[],[]).
+% rule(s_fX,[freeNatX],_,sX(freeNatX),[],[]).
+% rule(s_fX,[zX],_,s_fX(freeNatX),[],[]).
+% rule(s_fX,[sX(_)],_,s_fX(freeNatX),[],[]).
+% rule(freeNat_fX,[],_,freeNatX,[],[]).
+
+% Example for the clarification of unfold:
+% rule(g,[z],_,z,[],[]).
+% rule(g,[s(_)],_,z,[],[]).
+% rule(gen_list,[X],eq(g(X),z),cons(z,gen_list(X)),[],[]).
+% % rule(eq,[bot,_],_,false,[],[]).
+% rule(eq,[z,z],_,true,[],[]).
+% rule(eq,[s(X),s(Y)],_,eq(X,Y),[],[]).
+% % rule(eq,[z,bot],_,false,[],[]).
+% rule(eq,[z,s(_)],_,false,[],[]).
+% % rule(eq,[s(_),bot],_,false,[],[]).
+% rule(eq,[s(_),z],_,false,[],[]).
+
+% Example for testing outermost unfolding:
+% rule(rl,[_X,1],_,1,[],[]).
+% rule(rl,[2,2],_,2,[],[]).
+% rule(rl,[3,2],_,3,[],[]).
+% rule(one,[],_,1,[],[]).
+% rule(loop,[],_,loop,[],[]).
+% rule(main34,[],_,rl(loop,one),[],[]).
+
+% rule(loop,[],_,loop,[],[]).
+% rule(por,[true,_],_,true,[],[]).
+% rule(por,[_,true],_,true,[],[]).
+% rule(main35a,[],_,por(true,loop),[],[]).
+% rule(main35b,[],_,por(loop,true),[],[]).
+
+% One more example from FLOPS14 that has to do with the completeness 
+% of outermost unfolding
+
+% rule(foo,[X],_,h(X,f(X)),[],[rule('Foo1')]).
+% rule(f,[z],_,z,[],[rule('F1')]).
+% rule(h,[s(_X),_Y],_,z,[],[rule('H1')]).
+
+% Larger / global example:
+% rule(ite,[true,T,_E],_,T,[],[rule('I1')]).
+% rule(ite,[false,_T,E],_,E,[],[rule('I2')]).
+% rule(gen,[N],_,cons(N,gen(N+1)),[],[rule('G')]).
+% rule(senior,[Age],_,ite(Age>64,true,false),[],[rule('S')]).
+% rule(map,[_F,nil],_,nil,[],[rule('M1')]).
+% rule(map,[F,cons(X,Xs)],_,cons(F@[X],map(F,Xs)),[],[rule('M2')]).
+% rule(main50,[],_,map(senior,gen(64)),[],[rule('Main50')]).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Syntactic SETS
@@ -443,7 +518,7 @@ pretty_fact(fact(Function,Pattern,Guard,Body,Where,Store),Prefix):-
     GuardU=Guard),
   vars2letters(dummy(PatternU,GuardU,BodyU,WhereU)),
   write(Prefix),write(' '),write(Head),
-  ((\+guard_success(GuardAux) ; Where\=[]) -> write(' | ') ; true),
+  ((\+guard_success(GuardAux) ; Where\=[]) -> write(' |> ') ; true),
   ((\+guard_success(GuardAux),Where=[]) -> write(GuardU) ; true), %% G only
   ((\+guard_success(GuardAux),Where\=[]) -> write('and('),write(GuardU),write(','),pretty_where(WhereU),write(')') ; true) , % G,W
   ((guard_success(GuardAux),Where\=[]) -> pretty_where(WhereU) ; true), % W only
@@ -585,7 +660,6 @@ unfold_rule(Rule,NewFact):-
   add_arguments(B,AdaptedB),
   (adapt_partial_apps(AdaptedB,AdaptedB2)->true;AdaptedB2=AdaptedB),
   eval(AdaptedB2,EvaluationG,AdaptedB3),
-%%  eval(and(G,EvaluationG),EvaledG,ConstG), %%%% OJO
   NewFact=fact(F,P,and(G,EvaluationG),AdaptedB3,W,S).
 
 unfold_rule_aux(rule(RuleF,RulePattern,RuleGuard,RuleBody,RuleWhere,RuleStore),NewFact):-
@@ -594,6 +668,7 @@ unfold_rule_aux(rule(RuleF,RulePattern,RuleGuard,RuleBody,RuleWhere,RuleStore),N
   %% A rule without full applications of FS is returned as it is.
 unfold_rule_aux(rule(RuleF,RulePattern,RuleGuard,RuleBody,RuleWhere,RuleStore),NewFact):-
   has_full_application(dummy(RuleGuard,RuleBody),Pos,Exp),
+  \+is_purgable(rule(RuleF,RulePattern,RuleGuard,RuleBody,RuleWhere,RuleStore),Pos),
   eval(Exp,GuardExp,EvaledExp),
   (guard_success(GuardExp)->GuardExp2=_ ; GuardExp2=GuardExp),
   EvaledExp=..[ExpF|ExpArgs],
@@ -678,8 +753,8 @@ removable_fact(fact(F,NewH,NewG,NewB,NewW,_NewS),VariantFlag):-
       \+variant(fact(F,H,G,B,W,_S),fact(F,NewH,NewG,NewB,NewW,_NewS))
   ;
       true),
-  H=NewH,
-  % variant(H,NewH),
+  % H=NewH,
+  variant(H,NewH),
   variant(G,NewG), %% Until we have constraint solvers, we do a fake test
   variant(W,NewW), %% for guards
   lesser(NewB,B). %% NewB<=B.
@@ -741,15 +816,6 @@ eval_list([E|Es],and(Constraint,Constraints),[E2|E2s]):-
 %% Given a expression headed by a predefined function, evaluate it while
 %% capturing exceptions: If an exception arises return the expression as it was
 
-% eval_pf(Expr,PFConstraint,EvaledExpr):-
-%   Expr=..[F|_Args],
-%   member(F,['<','>']),!,
-%   (catch(call(Expr),Error,_Res=Expr)->
-%     (var(Error)->EvaledExpr=true;EvaledExpr=Expr)
-%   ;
-%     EvaledExpr=false
-%   ),
-%   PFConstraint=_.
 eval_pf(Expr,PFConstraint,EvaledExpr):-
   Expr=..[F|Args],
   ( \+ member(F,['+','-','*','/','<','>']) 
@@ -855,3 +921,130 @@ prettyprint_factfactlist([Fact-FactList|Fs]):-
   pretty_fact(Fact,'*'),nl,
   write_list(FactList,'***'),
   prettyprint_factfactlist(Fs).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Abstraction
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Given a term from a rule pattern, returns the same term with some
+% constructors replaced by the corresponding function.
+% This function must be extended to consider all the necessary pairs
+% (constructor, function)
+catamorphism(X,X):-var(X),!.
+catamorphism(suc_cX(X),suc_fX(X2)):-!,
+  catamorphism(X,X2).
+catamorphism(zX,z_fX):-!.
+catamorphism(sX(X),s_fX(X2)):-!,catamorphism(X,X2).
+catamorphism(freeNatX,freeNat_fX):-!.
+catamorphism(X,X).
+
+%% Applies the catamorhisms to the patterns of a rule
+catamorphism_list([],[]).
+catamorphism_list([P|Ps],[Pf|Pfs]):-
+  catamorphism(P,Pf),
+  catamorphism_list(Ps,Pfs).
+
+% Given the pattern of a rule, evaluate all the expressions while leaving
+% terms untouched
+evaluate_pattern_expression_list([],[]).
+evaluate_pattern_expression_list([E|Es],[Eevaled|EsEvaled]):-
+  evaluate_pattern_expression(E,Eevaled),
+  evaluate_pattern_expression_list(Es,EsEvaled).
+
+% Replaces a function invocation by the body of the rules that matches it
+% (preliminary version: Note that it does not deal with guards)
+evaluate_pattern_expression(X,X):-var(X),!.
+evaluate_pattern_expression(E,Body):-
+  E=..[F|Args],
+  fact(F,Args,_,Body,_,_),!.
+evaluate_pattern_expression(Constructor,Constructor):-
+  Constructor=..[C],
+  \+fact(C,[],_,_,_,_),!.
+evaluate_pattern_expression(E,Eevaled):-
+  E=..[Function|Args], %% No rule matches E at this stage
+  evaluate_pattern_expression_list(Args,ArgsEvaled),
+  E2=..[Function|ArgsEvaled],
+  evaluate_pattern_expression(E2,Eevaled).
+
+
+%% Given a fact, apply the catamorphisms and evaluate the resulting expressions
+fact_cat_eval(fact(F,Ps,Guard,Body,W,FactName),fact(F,NewPs,Guard,Body,W,FactName)):-
+  catamorphism_list(Ps,PsAux),
+  evaluate_pattern_expression_list(PsAux,NewPs),
+  (Ps\=NewPs -> %% A fact is only changed if its pattern actually changes 
+    (retract(fact(F,Ps,Guard,Body,W,FactName)),
+    assert_fact(fact(F,NewPs,Guard,Body,W,FactName)))
+  ;
+    true
+  ).
+
+facts_cat_eval:-
+  findall(fact(F,P,G,B,W,N),fact(F,P,G,B,W,N),Facts),
+  facts_cat_eval_list(Facts).
+
+facts_cat_eval_list([]).
+facts_cat_eval_list([F|Fs]):-
+  fact_cat_eval(F,_NewF),facts_cat_eval_list(Fs).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% unfold at outermost positions only:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Asserts the flag that says that we are unfolding at outermost positions only
+assert_outermost_only:-
+  (outermost_only -> true ; assert(outermost_only)).
+
+%% Removes the flag that says that we are unfolding at outermost positions only
+retract_outermost_only:- retract(outermost_only).
+
+%% Given a position and an expression, return the subexpression at that
+%% position.
+expr_at([],E,E). %% The root position of E is occupied by E itself
+expr_at([P|Ps],E,EAtPPs):-
+  E=..[_|Args],
+  get_nth_element(Args,P,EAtP),
+  expr_at(Ps,EAtP,EAtPPs).
+
+%% Given a list, return the list without its last element
+remove_last([_],[]).
+remove_last([E|Es],[E|EsWithoutLast]):-
+  remove_last(Es,EsWithoutLast).
+
+%% Given of rule and a position, succeeds if the position of the rule is
+%% 'purgable', that is, if:
+%% 1.- the position has a parent position that matches
+%% one or more facts in the current interpretation.
+%%
+%% AND
+%%
+%% 2.- Replacing the candidate position by a free variable does not
+%% create an expression that matches more fact heads than the expression
+%% before the replacement
+
+%% No position is purged if we are not performing outermost only unfolding.
+%% (or the position is the root position of the guard or the body)
+is_purgable(_,Pos):-
+  (\+outermost_only;Pos=[_]),!,fail. 
+is_purgable(rule(_F,_P,G,B,_W,_R),Pos):- %% (outermost_only and Pos<>[_])
+  remove_last(Pos,ParentPos),
+  expr_at(ParentPos,dummy(G,B),ExprAtParentPos),
+  full_application(ExprAtParentPos),
+  ExprAtParentPos=..[F|ExprAtParentPosArgs],
+  findall(Patterns,(fact(F,Patterns,_G,_B,_W,_Raux),match(Patterns,ExprAtParentPosArgs,_)),Pats),
+%  nl,write(pats1(ExprAtParentPos,Pats)),nl,
+  Pats\=[], %% Condition 1
+  length(Pats,LengthPats),
+  Pos=[GuardOrBody|_PosTail], %% Is Pos in the Guard(1) or in the Body(2)?
+  replace(dummy(G,B),Pos,_,DummyWithVar), %% DummyWithVar=dummy(_6136,leq(zero,_6445))
+  expr_at([GuardOrBody],DummyWithVar,ExprWithVar),
+  ExprWithVar=..[F|ExprWithVarArgs],
+% write(exprWithVar(ExprWithVar)@Pos),nl,  
+  findall(Patterns2,(fact(F,Patterns2,_G,_B,_W,_Raux2),match(Patterns2,ExprWithVarArgs,_)),Pats2),
+% nl,write(pats2(ExprWithVar,Pats2)),nl,
+  length(Pats2,LengthPats2), %% Condition 2
+  LengthPats=LengthPats2,
+  nl,write(purged(Pos@dummy(G,B))),nl,!. %% A fact has matched a parent pos 
+is_purgable(rule(_F,_P,G,B,_W,_R),Pos):-
+  remove_last(Pos,ParentPos),
+  is_purgable(rule(_F,_P,G,B,_W,_Raux),ParentPos).
+

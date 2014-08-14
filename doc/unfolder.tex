@@ -541,4 +541,149 @@ removes any overlapping that may exist inside the current
 interpretation (that is, {\tt reclean} acts on all the functions of the
 interpretation). 
 
+
+
+\chapter{Outermost Unfolding}
+\label{chap_outermost}
+
+By default, \unfolder performs unfolding steps in all the possible
+ways: That means that all the expressions that are headed by a
+user-defined function are tested against the facts known so far in order
+to check whether the pair $\langle$ {\em expression}, {\em fact}
+$\rangle$ is suitable for unfolding.
+
+This, of course, can generate a large number of redundant, overlapping
+facts. These redundant facts will be removed by {\tt clean} and {\tt
+ reclean} (or, alternatively, {\tt clean} and {\tt reclean} will
+modify the existing facts so that they do not overlap).
+
+However, if the generation of redundant facts is avoided as much as
+possible, the necessity of removing or modifying facts is greatly
+reduced and thus the system will run more efficiently.
+
+It is well known that {\em outermost unfolding} prevents the evaluation of
+expressions whose value is not needed to find the real value of a
+larger expression (evaluation proceeds from the outermost position,
+delving to innermost positions only if their value is strictly needed
+to find the value of the larger expression).
+
+\unfolder can simulate {\em outermost unfolding}. Its behaviour can be
+changed from the default one (full unfolding of all suitable
+positions) by using the following predicate:
+
+\begin{verbatim}
+:- assert_outermost_only.
+\end{verbatim} 
+
+\noindent
+After the predicate above is executed all calls to {\tt
+  unfolding\_operator/0} use {\em outermost unfolding}. The default
+behaviour is recovered by executing the following predicate:
+
+\begin{verbatim}
+:- retract_outermost_only.
+\end{verbatim} 
+
+\section{Example: Differences Between Full and Outermost Unfolding}
+
+Let us think of the following code:
+
+\begin{verbatim}
+data Nat = Zero | Suc Nat
+
+leq :: Nat -> Nat -> Bool
+leq Zero _ = True
+leq (Suc _) Zero = False
+leq (Suc x) (Suc y) = leq x y
+
+g :: Nat -> Nat
+g Zero = Zero
+
+main22b :: Nat -> Bool
+main22b x = leq Zero (g x)
+\end{verbatim}
+
+\noindent
+This code translates into the following rules of \unfolder (including
+names for all the rules):
+
+\begin{verbatim}
+rule(leq,[zero,_],_,true,[],[rule('L1')]).
+rule(leq,[suc(_),zero],_,false,[],[rule('L2')]).
+rule(leq,[suc(X),suc(Y)],_,leq(X,Y),[],[rule('L3')]).
+rule(g,[zero],_,zero,[],[rule('G1')]).
+rule(main22b,[X],_,leq(zero,g(X)),[],[rule('Main22b')]).
+\end{verbatim}
+
+\noindent
+Using the unfolder's default behaviour, the following results are
+obtained before cleaning (note that, since {\tt g} is incomplete, the
+optimized version of {\tt clean} cannot be applied:
+
+\begin{verbatim}
+?- unfolding_operator,show_int.
+* leq(Zero,b) = True  <L1>
+* leq(Suc(b),Zero) = False  <L2>
+* g(Zero) = Zero  <G1>
+
+yes
+?- unfolding_operator,show_int.
+* leq(Zero,b) = True  <L1>
+* leq(Suc(b),Zero) = False  <L2>
+* g(Zero) = Zero  <G1>
+* leq(Suc(Zero),Suc(b)) = True  <L3,L1>
+* leq(Suc(Suc(b)),Suc(Zero)) = False  <L3,L2>
+* main22b(b) = True  <Main22b,L1>
+* main22b(Zero) = True  <Main22b,G1,L1>
+
+yes
+\end{verbatim}
+
+\noindent
+The execution above shows two interpretations ($I_1$ and $I_2$) for
+the program given. Note that there are two overlapping facts for {\tt
+  main22b}. Specifically, the second of those facts ({\tt *
+  main22b(Zero) = True  <Main22b,G1,L1>}) owes its existence to the
+the fact that the unfolding process has evaluated {\tt g x} (rule {\tt
+  G1}) before evaluating {\tt leq} by means of rule {\tt L1}. Since
+the value of {\tt g x} is irrelevant for {\tt main22b}, what that
+superfluous rule usage has achieved is to create a fact that is not
+needed (it is too specific).
+
+{\em Outermost unfolding} would have avoided that superfluous
+evaluation after realizing that the value of the inner expression {\tt
+  g x} is not needed to find the value of {\tt main22b} since only
+{\tt leq}'s first rule is usable to unfold the body of {\tt main22b}
+and that rule does not demand the value of the position occupied by
+{\tt g x}. This causes {\em outermost unfolding} to {\em ignore} that
+position when unfolding. The result is as follows:
+
+\begin{verbatim}
+?- assert_outermost_only.
+
+yes
+?- unfolding_operator,show_int.           
+* leq(Zero,b) = True  <L1>
+* leq(Suc(b),Zero) = False  <L2>
+* g(Zero) = Zero  <G1>
+
+yes
+?- unfolding_operator,show_int.
+
+* leq(Zero,b) = True  <L1>
+* leq(Suc(b),Zero) = False  <L2>
+* g(Zero) = Zero  <G1>
+* leq(Suc(Zero),Suc(b)) = True  <L3,L1>
+* leq(Suc(Suc(b)),Suc(Zero)) = False  <L3,L2>
+* main22b(b) = True  <Main22b,L1>
+
+yes
+\end{verbatim}
+
+\noindent
+Observe that both interpretations are identical to the ones before
+except for the fact that was too specific: it is no longer there. This
+has been caused because \unfolder has {\em purged out} the expression
+{\tt g x} when considering the positions available for unfolding.
+
 \end{document}
