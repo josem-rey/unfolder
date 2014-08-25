@@ -518,7 +518,7 @@ pretty_fact(fact(Function,Pattern,Guard,Body,Where,Store),Prefix):-
     GuardU=Guard),
   vars2letters(dummy(PatternU,GuardU,BodyU,WhereU)),
   write(Prefix),write(' '),write(Head),
-  ((\+guard_success(GuardAux) ; Where\=[]) -> write(' |> ') ; true),
+  ((\+guard_success(GuardAux) ; Where\=[]) -> write(' | ') ; true),
   ((\+guard_success(GuardAux),Where=[]) -> write(GuardU) ; true), %% G only
   ((\+guard_success(GuardAux),Where\=[]) -> write('and('),write(GuardU),write(','),pretty_where(WhereU),write(')') ; true) , % G,W
   ((guard_success(GuardAux),Where\=[]) -> pretty_where(WhereU) ; true), % W only
